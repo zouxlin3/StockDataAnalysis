@@ -35,7 +35,28 @@ class StockData:
         data = data.sort_values(by='TRADE_DT')
         data = data.reset_index(drop=True)
 
+        while len(data[(data['TRADE_DT'] == start_date)].index) == 0:  # 起始日期没有数据时，向后延
+            day = start_date % 100
+            month = start_date % 1000
+            if day == 31:
+                if month > 1200:
+                    start_date = (start_date/1000 + 1)*1000 + 101
+                else:
+                    start_date = (start_date/100 + 1)*100 + 1
+            else:
+                start_date = start_date + 1
         start_index = data[(data['TRADE_DT'] == start_date)].index[0]  # index返回int64index类型，取[0]即为int
+
+        while len(data[(data['TRADE_DT'] == end_date)].index) == 0:  # 终止日期没有数据时，向前延
+            day = end_date % 100
+            month = end_date % 1000
+            if day == 1:
+                if month < 200:
+                    end_date = (end_date/1000 - 1)*1000 + 1231
+                else:
+                    end_date = (end_date/100 - 1)*100 + 31
+            else:
+                end_date = end_date - 1
         end_index = data[(data['TRADE_DT'] == end_date)].index[0]
 
         output = data.iloc[start_index:end_index+1]
@@ -43,6 +64,15 @@ class StockData:
         output.columns = ['date', 'open', 'high', 'low', 'close']
 
         return output
+
+    def get_data_by_date(self, adate: str, symbols: List[str]):
+        output = pd.DataFrame(columns=('symbols', 'open', 'high', 'low', 'close'))
+        for i in symbols:
+            filepath = self.get_filepath(i)
+            if filepath:
+                data = pd.read_csv(filepath)
+            else:
+                continue
 
     def get_filepath(self, stock: str):  # 判断该股票csv是否存在
         filepath = self.filenames.get(stock)
