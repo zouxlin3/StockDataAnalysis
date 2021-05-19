@@ -26,7 +26,12 @@ class StockData:
             if filepath:
                 self.dataframes[i] = pd.read_csv(filepath)
             else:
-                self.dataframes[i] = pd.DataFrame()  # 没有该股票csv时添加空dataframe
+                self.dataframes[i] = pd.DataFrame(columns=('', 'OBJECT_ID', 'S_INFO_WINDCODE', 'TRADE_DT', 'CRNCY_CODE',
+                                                  'S_DQ_PRECLOSE', 'S_DQ_OPEN', 'S_DQ_HIGH', 'S_DQ_LOW', 'S_DQ_CLOSE',
+                                                  'S_DQ_CHANGE', 'S_DQ_PCTCHANGE', 'S_DQ_VOLUME', 'S_DQ_AMOUNT',
+                                                  'S_DQ_ADJPRECLOSE', 'S_DQ_ADJOPEN', 'S_DQ_ADJHIGH', 'S_DQ_ADJLOW',
+                                                  'S_DQ_ADJCLOSE', 'S_DQ_ADJFACTOR', 'S_DQ_AVGPRICE', 'S_DQ_TRADESTATUS'
+                                                  , 'OPDATE', 'OPMODE'))  # 没有该股票csv时添加空dataframe
 
     def get_data_by_symbol(self, symbol: str, start_date: int, end_date: int):
         filepath = self.get_filepath(symbol)
