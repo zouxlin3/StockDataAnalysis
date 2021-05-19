@@ -65,14 +65,29 @@ class StockData:
 
         return output
 
-    def get_data_by_date(self, adate: str, symbols: List[str]):
+    def get_data_by_date(self, adate: int, symbols: List[str]):
         output = pd.DataFrame(columns=('symbols', 'open', 'high', 'low', 'close'))
+
         for i in symbols:
             filepath = self.get_filepath(i)
             if filepath:
                 data = pd.read_csv(filepath)
+                data['TRADE_DT'] = data['TRADE_DT'].apply(int)
+
+                date_index = data[(data['TRADE_DT'] == adate)].index
+                if len(date_index) == 0:  # 该日期没有数据时
+                    print('There is no data on '+str(adate)+' in stock: '+i)
+                    continue
+
+                astock = data.iloc[date_index[0]]  # 取该股票日频数据中的一行
+                astock = astock.loc(axis=0)['S_INFO_WINDCODE', 'S_DQ_OPEN', 'S_DQ_HIGH', 'S_DQ_LOW', 'S_DQ_CLOSE']
+                astock.index = ['symbols', 'open', 'high', 'low', 'close']
+                output = output.append(astock)  # 不能直接output.append
             else:
                 continue
+
+        output['symbols'] = output['symbols'].apply(lambda x: x[:6])  # 取S_INFO_WINDCODE的前6位，即股票代码
+        return output
 
     def get_filepath(self, stock: str):  # 判断该股票csv是否存在
         filepath = self.filenames.get(stock)
