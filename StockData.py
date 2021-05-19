@@ -25,6 +25,8 @@ class StockData:
             filepath = self.get_filepath(i)
             if filepath:
                 self.dataframes[i] = pd.read_csv(filepath)
+            else:
+                self.dataframes[i] = pd.DataFrame()  # 没有该股票csv时添加空dataframe
 
     def get_data_by_symbol(self, symbol: str, start_date: int, end_date: int):
         filepath = self.get_filepath(symbol)
@@ -89,10 +91,20 @@ class StockData:
         output['symbols'] = output['symbols'].apply(lambda x: x[:6])  # 取S_INFO_WINDCODE的前6位，即股票代码
         return output
 
+    def format_date(self, symbol: str):
+        self.read([symbol])
+        self.dataframes[symbol]['TRADE_DT'] = self.dataframes[symbol]['TRADE_DT'].apply(self.str2timestamp)
+
     def get_filepath(self, stock: str):  # 判断该股票csv是否存在
         filepath = self.filenames.get(stock)
         if filepath:
             return filepath
         else:
-            print('There is no stock: ' + stock)
             return False
+
+    def str2timestamp(self, date: str):
+        date = int(date)
+        year = date//10000
+        month = (date % 10000)//100
+        day = date % 100
+        return pd.Timestamp(year, month, day)
