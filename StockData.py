@@ -101,7 +101,8 @@ class StockData:
     def plot(self, symbol: str, field: str):
         self.format_date(symbol)
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')
+        data = data.sort_values(by='TRADE_DT')  # 根据时间排序
+        data = data.reset_index(drop=True)
 
         changed_field = self.field_change(field)
         data[changed_field] = data[changed_field].apply(self.int_remove_nan)  # y轴及直方图数据
@@ -125,6 +126,27 @@ class StockData:
     def format_date(self, symbol: str):
         self.read([symbol])
         self.dataframes[symbol]['TRADE_DT'] = self.dataframes[symbol]['TRADE_DT'].apply(self.str2timestamp)
+
+    def adjust_data(self, symbol: str):
+        self.format_date(symbol)  # 根据时间排序
+        data = self.dataframes[symbol]
+        data = data.sort_values(by='TRADE_DT')
+        data = data.reset_index(drop=True)
+
+        rows = data.shape[0]
+        data.loc[rows-1, 'forward_af'] = 1.0  # 计算前复权因子
+        for i in range(rows-1):
+            data.loc[rows-2-i, 'forward_af'] = self.get_forward_af(data.loc[rows-2-i, 'S_DQ_CLOSE'],
+                                                                   data.loc[rows-1-i, 'S_DQ_PRECLOSE'],
+                                                                   data.loc[rows-1-i, 'forward_af'])
+
+        for i in ['open', 'high', 'low', 'close']:  # 对代表价格计算复权价
+            for j in range(rows-1):
+                data.loc[rows-2-j, 'forward_adjust_'+i] = self.forward_adjust_price(data.loc[rows-2-j, self.field_change(i)],
+                                                                                    data.loc[rows-2-j, 'forward_af'],
+                                                                                    data.loc[rows-1-j, 'forward_af'])
+
+        self.dataframes[symbol] = data
 
     def get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
@@ -158,3 +180,11 @@ class StockData:
             return 0
         else:
             return int(value)
+
+    # close：当天收盘价  preclose：明天前收  foraf：明天复权因子
+    def get_forward_af(self, close: str, preclose: str, foraf: float):
+        return round((int(preclose)/int(close))*foraf, 5)  # 最多5位小数
+
+    # price：当天价格
+    def forward_adjust_price(self, price: str, today_af: float, torm_af: float):
+        return int(price)*today_af/torm_af
