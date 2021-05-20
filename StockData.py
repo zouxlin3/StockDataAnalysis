@@ -26,6 +26,7 @@ class StockData:
             filepath = self.get_filepath(i)
             if filepath:
                 self.dataframes[i] = pd.read_csv(filepath)
+                self.format_date(i)
             else:
                 self.dataframes[i] = pd.DataFrame(columns=('', 'OBJECT_ID', 'S_INFO_WINDCODE', 'TRADE_DT', 'CRNCY_CODE',
                                                   'S_DQ_PRECLOSE', 'S_DQ_OPEN', 'S_DQ_HIGH', 'S_DQ_LOW', 'S_DQ_CLOSE',
@@ -35,9 +36,8 @@ class StockData:
                                                   , 'OPDATE', 'OPMODE'))  # 没有该股票csv时添加空dataframe
 
     def get_data_by_symbol(self, symbol: str, start_date: str, end_date: str):
-        self.format_date(symbol)  # 按日期排序
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')
+        data = data.sort_values(by='TRADE_DT')  # 按日期排序
         data = data.reset_index(drop=True)
 
         timedelta = pd.Timedelta(days=1)
@@ -63,7 +63,6 @@ class StockData:
         adate = self.str2timestamp(adate)
 
         for i in symbols:
-            self.format_date(i)
             data = self.dataframes[i]
 
             date_index = data[(data['TRADE_DT'] == adate)].index
@@ -82,7 +81,6 @@ class StockData:
         output = pd.DataFrame(columns=['date']+symbols)
 
         for i in symbols:
-            self.format_date(i)
             data = self.dataframes[i]
             afield = data.loc(axis=1)['TRADE_DT', field]  # 读取股票i的date和field列数据
             afield.columns = ['date', i]
@@ -99,7 +97,6 @@ class StockData:
         return output
 
     def plot(self, symbol: str, field: str):
-        self.format_date(symbol)
         data = self.dataframes[symbol]
         data = data.sort_values(by='TRADE_DT')  # 根据时间排序
         data = data.reset_index(drop=True)
@@ -124,13 +121,11 @@ class StockData:
         plt.savefig(os.path.join('figures', 'E2.2.jpg'), dpi=200)
 
     def format_date(self, symbol: str):
-        self.read([symbol])
         self.dataframes[symbol]['TRADE_DT'] = self.dataframes[symbol]['TRADE_DT'].apply(self.str2timestamp)
 
     def adjust_data(self, symbol: str):
-        self.format_date(symbol)  # 根据时间排序
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')
+        data = data.sort_values(by='TRADE_DT')  # 根据时间排序
         data = data.reset_index(drop=True)
 
         rows = data.shape[0]
