@@ -77,11 +77,31 @@ class StockData:
         output['symbols'] = output['symbols'].apply(lambda x: x[:6])  # 取S_INFO_WINDCODE的前6位，即股票代码
         return output
 
+    def get_data_by_field(self, field: str, symbols: List[str]):
+        output = pd.DataFrame(columns=['date']+symbols)
+
+        for i in symbols:
+            self.format_date(i)
+            data = self.dataframes[i]
+            afield = data.loc(axis=1)['TRADE_DT', field]  # 读取股票i的field列数据
+            afield.columns = ['date', i]
+
+            for j in range(afield.shape[0]):
+                date_index = output[(output['date'] == afield['date'][j])].index
+                if len(date_index) == 0:  # 判断output中date列有无该时间戳，没有的话添加新的一行
+                    output = output.append(afield.iloc[j])
+                else:
+                    output.loc[date_index, i] = afield.loc[j, i]
+
+        output = output.sort_values(by='date')
+        output = output.reset_index(drop=True)
+        return output
+
     def format_date(self, symbol: str):
         self.read([symbol])
         self.dataframes[symbol]['TRADE_DT'] = self.dataframes[symbol]['TRADE_DT'].apply(self.str2timestamp)
 
-    def get_filepath(self, stock: str):  # 判断该股票csv是否存在
+    def get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
         if filepath:
             return filepath
