@@ -1,6 +1,7 @@
 from typing import List
 import os
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class StockData:
@@ -83,7 +84,7 @@ class StockData:
         for i in symbols:
             self.format_date(i)
             data = self.dataframes[i]
-            afield = data.loc(axis=1)['TRADE_DT', field]  # 读取股票i的field列数据
+            afield = data.loc(axis=1)['TRADE_DT', field]  # 读取股票i的date和field列数据
             afield.columns = ['date', i]
 
             for j in range(afield.shape[0]):
@@ -96,6 +97,30 @@ class StockData:
         output = output.sort_values(by='date')
         output = output.reset_index(drop=True)
         return output
+
+    def plot(self, symbol: str, field: str):
+        self.format_date(symbol)
+        data = self.dataframes[symbol]
+        data = data.sort_values(by='TRADE_DT')
+
+        changed_field = self.field_change(field)
+        data[changed_field] = data[changed_field].apply(self.int_remove_nan)  # y轴及直方图数据
+        y = data[changed_field].values.tolist()
+        plt.ylabel(field)
+
+        labels = data['TRADE_DT']  # x轴
+        x = range(labels.shape[0])
+        plt.xlabel('date')
+        # plt.xticks(x, labels)
+
+        plt.title(symbol)
+
+        if field == 'volume' or field == 'turnover':
+            plt.bar(x, y, width=0.35, linewidth=0.8, facecolor='tomato', edgecolor='orangered')
+        else:
+            plt.plot(x, y, c='tomato', linewidth=0.8)
+
+        plt.savefig(os.path.join('figures', 'E2.2.jpg'), dpi=200)
 
     def format_date(self, symbol: str):
         self.read([symbol])
@@ -114,3 +139,22 @@ class StockData:
         month = (date % 10000)//100
         day = date % 100
         return pd.Timestamp(year, month, day)
+
+    def field_change(self, field):
+        fields = {
+            'open': 'S_DQ_OPEN',
+            'high': 'S_DQ_HIGH',
+            'low': 'S_DQ_LOW',
+            'close': 'S_DQ_CLOSE',
+            'vwap': 'S_DQ_VWAP',
+            'volume': 'S_DQ_VOLUME',
+            'turnover': 'S_DQ_AMOUNT'
+        }
+
+        return fields[field]
+
+    def int_remove_nan(self, value: str):  # str2int, 将NaN设为0
+        if value != value:
+            return 0
+        else:
+            return int(value)
