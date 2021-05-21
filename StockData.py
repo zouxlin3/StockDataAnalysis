@@ -2,6 +2,7 @@ from typing import List
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class StockData:
@@ -132,7 +133,7 @@ class StockData:
                                                                      data.loc[rows-1-i, 'S_DQ_PRECLOSE'],
                                                                      data.loc[rows-1-i, 'forward_af'])
 
-        for i in ['open', 'high', 'low', 'close']:  # 对代表价格计算复权价
+        for i in ['open', 'high', 'low', 'close']:  # 对代表价格计算前复权价
             for j in range(rows-1):
                 data.loc[rows-2-j, 'forward_adjust_'+i] = self.__forward_adjust_price(data.loc[rows - 2 - j, self.__field_change(i)],
                                                                                       data.loc[rows-2-j, 'forward_af'],
@@ -207,8 +208,19 @@ class StockData:
             data.loc[i, 'mtr'] = self.__calculate_mtr(data.loc[i, 'S_DQ_HIGH'], data.loc[i, 'S_DQ_LOW'], data.loc[i, 'S_DQ_PRECLOSE'])
 
         data['atr'] = data['mtr'].rolling(periods).mean()  # 过去periods天的mtr平均值
-        output = data.loc(axis=1)['atr', 'mtr']
+        output = data.loc(axis=1)['atr']
         output.index = data["TRADE_DT"]
+        return output
+
+    def rsi(self, symbol: str, periods: int):
+        data = self.dataframes[symbol]
+
+        for i in range(data.shape[0]-periods):  # 从第periods行开始遍历每一行
+            pctchanges = data.loc[i:i+periods, 'S_DQ_PCTCHANGE'].values.tolist()  # 将一个periosd内的pctchange放入列表
+            data.loc[i+periods, 'rsi'] = self.__calculate_rsi(pctchanges)  # 计算该periods内的rsi
+
+        output = data['rsi']
+        output.index = data['TRADE_DT']
         return output
 
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
@@ -259,3 +271,34 @@ class StockData:
 
     def __calculate_mtr(self, high: float, low: float, preclose: float):
         return max(high-low, abs(preclose-low), abs(high-preclose))
+
+    '''
+    RSI指标的计算公式：RSI = [上升平均数÷(上升平均数＋下跌平均数)]×100
+    （其中，上升平均数是某一时期内升幅数的平均；而下跌平均数则是同一时期内跌幅数的平均）
+    '''
+    def __calculate_rsi(self, pctchanges: List[float]):
+        down_sum = 0.0
+        up_sum = 0.0
+        down_num = 0
+        up_num = 0
+
+        for i in pctchanges:
+            if i > 0:
+                up_num = up_num + 1
+                up_sum = up_sum + i
+            if i < 0:
+                down_num = down_num + 1
+                down_sum = down_sum + i
+
+        if up_num == 0:
+            if down_num == 0:
+                return np.nan
+            return 0
+        else:
+            up_avg = up_sum/up_num
+        if down_num == 0:
+            return 100
+        else:
+            down_avg = down_sum/down_num
+
+        return (up_avg/(up_avg+abs(down_avg)))*100
