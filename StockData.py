@@ -23,7 +23,7 @@ class StockData:
 
     def read(self, symbols: List[str]):  # dict结构
         for i in symbols:
-            filepath = self.____get_filepath(i)
+            filepath = self.__get_filepath(i)
             if filepath:
                 self.dataframes[i] = pd.read_csv(filepath)
                 self.format_date(i)
@@ -37,12 +37,10 @@ class StockData:
 
     def get_data_by_symbol(self, symbol: str, start_date: str, end_date: str):
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')  # 按日期排序
-        data = data.reset_index(drop=True)
 
         timedelta = pd.Timedelta(days=1)
-        start_date = self.____str2timestamp(start_date)
-        end_date = self.____str2timestamp(end_date)
+        start_date = self.__str2timestamp(start_date)
+        end_date = self.__str2timestamp(end_date)
 
         while len(data[(data['TRADE_DT'] == start_date)].index) == 0:  # 起始日期没有数据时，向后延
             start_date = start_date + timedelta
@@ -60,13 +58,14 @@ class StockData:
 
     def get_data_by_date(self, adate: str, symbols: List[str]):
         output = pd.DataFrame(columns=('symbols', 'open', 'high', 'low', 'close'))
-        adate = self.____str2timestamp(adate)
+        adate = self.__str2timestamp(adate)
 
         for i in symbols:
             data = self.dataframes[i]
 
             date_index = data[(data['TRADE_DT'] == adate)].index
             if len(date_index) == 0:  # 该日期没有数据时
+                output.append(pd.Series({'symbols': i}))
                 continue
 
             astock = data.iloc[date_index[0]]  # 取该股票日频数据中的一行
@@ -85,7 +84,7 @@ class StockData:
             afield = data.loc(axis=1)['TRADE_DT', field]  # 读取股票i的date和field列数据
             afield.columns = ['date', i]
 
-            for j in range(afield.shape[0]):
+            for j in range(afield.shape[0]):  # 遍历afield所有行
                 date_index = output[(output['date'] == afield['date'][j])].index
                 if len(date_index) == 0:  # 判断output中date列有无该时间戳，没有的话添加新的一行
                     output = output.append(afield.iloc[j])
@@ -98,11 +97,9 @@ class StockData:
 
     def plot(self, symbol: str, field: str):
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')  # 根据时间排序
-        data = data.reset_index(drop=True)
+        changed_field = self.__field_change(field)
 
-        changed_field = self.____field_change(field)
-        data[changed_field] = data[changed_field].apply(self.____int_remove_nan)  # y轴及直方图数据
+        data[changed_field] = data[changed_field].apply(self.__int_remove_nan)  # y轴及直方图数据
         y = data[changed_field].values.tolist()
         plt.ylabel(field)
 
@@ -121,32 +118,30 @@ class StockData:
         plt.savefig(os.path.join('figures', 'E2.2.jpg'), dpi=200)
 
     def format_date(self, symbol: str):
-        self.dataframes[symbol]['TRADE_DT'] = self.dataframes[symbol]['TRADE_DT'].apply(self.____str2timestamp)
+        self.dataframes[symbol]['TRADE_DT'] = self.dataframes[symbol]['TRADE_DT'].apply(self.__str2timestamp)
+        self.dataframes[symbol] = self.dataframes[symbol].sort_values(by='TRADE_DT')  # 根据时间排序
+        self.dataframes[symbol] = self.dataframes[symbol].reset_index(drop=True)
 
     def adjust_data(self, symbol: str):
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')  # 根据时间排序
-        data = data.reset_index(drop=True)
 
         rows = data.shape[0]
         data.loc[rows-1, 'forward_af'] = 1.0  # 计算前复权因子
         for i in range(rows-1):
-            data.loc[rows-2-i, 'forward_af'] = self.____get_forward_af(data.loc[rows - 2 - i, 'S_DQ_CLOSE'],
-                                                                       data.loc[rows-1-i, 'S_DQ_PRECLOSE'],
-                                                                       data.loc[rows-1-i, 'forward_af'])
+            data.loc[rows-2-i, 'forward_af'] = self.__get_forward_af(data.loc[rows - 2 - i, 'S_DQ_CLOSE'],
+                                                                     data.loc[rows-1-i, 'S_DQ_PRECLOSE'],
+                                                                     data.loc[rows-1-i, 'forward_af'])
 
         for i in ['open', 'high', 'low', 'close']:  # 对代表价格计算复权价
             for j in range(rows-1):
-                data.loc[rows-2-j, 'forward_adjust_'+i] = self.____forward_adjust_price(data.loc[rows - 2 - j, self.____field_change(i)],
-                                                                                        data.loc[rows-2-j, 'forward_af'],
-                                                                                        data.loc[rows-1-j, 'forward_af'])
+                data.loc[rows-2-j, 'forward_adjust_'+i] = self.__forward_adjust_price(data.loc[rows - 2 - j, self.__field_change(i)],
+                                                                                      data.loc[rows-2-j, 'forward_af'],
+                                                                                      data.loc[rows-1-j, 'forward_af'])
 
         self.dataframes[symbol] = data
 
     def resample(self, symbol: str, freq: int):
         data = self.dataframes[symbol]
-        data = data.sort_values(by='TRADE_DT')
-        data = data.reset_index(drop=True)
         output = pd.DataFrame(columns=('date', 'open', 'close', 'high', 'low', 'volume', 'turnover', 'vwap'))
 
         rows = data.shape[0]
@@ -154,7 +149,7 @@ class StockData:
             if (i+1) % freq == 0:
                 clip = data[i+1-freq:i+1]
                 clip = clip.reset_index(drop=True)
-                aresample = pd.Series({
+                aline = pd.Series({
                     'date': clip.loc[0, 'TRADE_DT'],
                     'open': clip.loc[0, 'S_DQ_OPEN'],
                     'close': clip.loc[freq-1, 'S_DQ_CLOSE'],
@@ -163,27 +158,27 @@ class StockData:
                     'volume': sum(clip.loc(axis=1)['S_DQ_VOLUME'].values.tolist()),
                     'turnover': sum(clip.loc(axis=1)['S_DQ_AMOUNT'].values.tolist()),
                 })
-                if aresample['volume'] != 0:
-                    aresample['vwap'] = round(aresample['turnover']/aresample['volume'], 4)  # 保留4位小数
-                output = output.append(aresample, ignore_index=True)
+                if aline['volume'] != 0:
+                    aline['vwap'] = round(aline['turnover']/aline['volume'], 4)  # 保留4位小数
+                output = output.append(aline, ignore_index=True)
 
         return output
 
-    def ____get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
+    def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
         if filepath:
             return filepath
         else:
             return False
 
-    def ____str2timestamp(self, date: str):
+    def __str2timestamp(self, date: str):
         date = int(date)
         year = date//10000
         month = (date % 10000)//100
         day = date % 100
         return pd.Timestamp(year, month, day)
 
-    def ____field_change(self, field):
+    def __field_change(self, field):
         fields = {
             'open': 'S_DQ_OPEN',
             'high': 'S_DQ_HIGH',
@@ -196,16 +191,16 @@ class StockData:
 
         return fields[field]
 
-    def ____int_remove_nan(self, value: str):  # str2int, 将NaN设为0
+    def __int_remove_nan(self, value: str):  # str2int, 将NaN设为0
         if value != value:
             return 0
         else:
             return int(value)
 
     # close：当天收盘价  preclose：明天前收  foraf：明天复权因子
-    def ____get_forward_af(self, close: str, preclose: str, foraf: float):
+    def __get_forward_af(self, close: str, preclose: str, foraf: float):
         return round((int(preclose)/int(close))*foraf, 5)  # 最多5位小数
 
     # price：当天价格
-    def ____forward_adjust_price(self, price: str, today_af: float, torm_af: float):
+    def __forward_adjust_price(self, price: str, today_af: float, torm_af: float):
         return int(price)*today_af/torm_af
