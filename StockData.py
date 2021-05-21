@@ -81,7 +81,7 @@ class StockData:
 
         for i in symbols:
             data = self.dataframes[i]
-            afield = data.loc(axis=1)['TRADE_DT', field]  # 读取股票i的date和field列数据
+            afield = data.loc(axis=1)['TRADE_DT', self.__field_change(field)]  # 读取股票i的date和field列数据
             afield.columns = ['date', i]
 
             for j in range(afield.shape[0]):  # 遍历afield所有行
@@ -164,6 +164,13 @@ class StockData:
 
         return output
 
+    def moving_average(self, symbol: str, field: str, window: int):
+        data = self.dataframes[symbol]
+
+        output = data[self.__field_change(field)].rolling(window, center=True).mean()
+        output.index = data['TRADE_DT']
+        return output
+
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
         if filepath:
@@ -186,7 +193,8 @@ class StockData:
             'close': 'S_DQ_CLOSE',
             'vwap': 'S_DQ_VWAP',
             'volume': 'S_DQ_VOLUME',
-            'turnover': 'S_DQ_AMOUNT'
+            'turnover': 'S_DQ_AMOUNT',
+            'preclose': 'S_DQ_PRECLOSE'
         }
 
         return fields[field]
