@@ -223,7 +223,28 @@ class StockData:
         output.index = data['TRADE_DT']
         return output
 
-    def macd(self, symbol: str, ):
+    '''
+    DIF＝EMA(short)-EMA(long)
+    DEA为DIF移动平均
+    MACD＝(DIF-DEA)*2
+    '''
+    def macd(self, symbol: str, long: int, short: int, dea_periods: int):
+        data = self.dataframes[symbol]
+
+        self.ema(symbol, long)
+        self.ema(symbol, short)
+
+        for i in range(data.shape[0]):  # 计算dif
+            data.loc[i, 'dif'] = data.loc[i, 'ema_'+str(short)] - data.loc[i, 'ema_'+str(long)]
+
+        data['dea_'+str(dea_periods)] = data['dif'].rolling(dea_periods).mean()  # 计算dea
+
+        for i in range(data.shape[0]):  # 计算macd
+            data.loc[i, 'macd'] = (data.loc[i, 'dif'] - data.loc[i, 'dea_'+str(dea_periods)])
+
+        output = data['macd']
+        output.index = data['TRADE_DT']
+        return output
 
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
