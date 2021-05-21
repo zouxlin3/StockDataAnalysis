@@ -200,6 +200,17 @@ class StockData:
         output.index = data['TRADE_DT']
         return output
 
+    def atr(self, symbol: str, periods: int):
+        data = self.dataframes[symbol]
+
+        for i in range(data.shape[0]):  # 遍历每一行，计算mtr
+            data.loc[i, 'mtr'] = self.__calculate_mtr(data.loc[i, 'S_DQ_HIGH'], data.loc[i, 'S_DQ_LOW'], data.loc[i, 'S_DQ_PRECLOSE'])
+
+        data['atr'] = data['mtr'].rolling(periods).mean()  # 过去periods天的mtr平均值
+        output = data.loc(axis=1)['atr', 'mtr']
+        output.index = data["TRADE_DT"]
+        return output
+
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
         if filepath:
@@ -239,9 +250,12 @@ class StockData:
             return int(value)
 
     # close：当天收盘价  preclose：明天前收  foraf：明天复权因子
-    def __get_forward_af(self, close: str, preclose: str, foraf: float):
-        return round((int(preclose)/int(close))*foraf, 5)  # 最多5位小数
+    def __get_forward_af(self, close: float, preclose: float, foraf: float):
+        return round((preclose/close)*foraf, 5)  # 最多5位小数
 
     # price：当天价格
-    def __forward_adjust_price(self, price: str, today_af: float, torm_af: float):
-        return int(price)*today_af/torm_af
+    def __forward_adjust_price(self, price: float, today_af: float, torm_af: float):
+        return price*today_af/torm_af
+
+    def __calculate_mtr(self, high: float, low: float, preclose: float):
+        return max(high-low, abs(preclose-low), abs(high-preclose))
