@@ -189,15 +189,15 @@ class StockData:
     def ema(self, symbol: str, periods: int):
         data = self.dataframes[symbol]
 
-        data['sma'] = data['S_DQ_AVGPRICE'].rolling(periods).mean()  # 计算sma
+        data['sma_'+str(periods)] = data['S_DQ_AVGPRICE'].rolling(periods).mean()  # 计算sma
         multiplier = 2/(periods+1)
 
-        data.loc[periods-1, 'ema'] = data.loc[periods-1, 'sma']  # 将第一个ema设为同日的sma
+        data.loc[periods-1, 'ema_'+str(periods)] = data.loc[periods-1, 'sma_'+str(periods)]  # 将第一个ema设为同日的sma
         for i in range(data.shape[0]-periods):  # 从第二个ema开始计算
-            data.loc[i+periods, 'ema'] = (data.loc[i+periods, 'S_DQ_CLOSE']-data.loc[i+periods-1, 'ema'])\
-                                         * multiplier+data.loc[i+periods-1, 'ema']
+            data.loc[i+periods, 'ema_'+str(periods)] = (data.loc[i+periods, 'S_DQ_CLOSE']-data.loc[i+periods-1, 'ema_'+str(periods)])\
+                                         * multiplier+data.loc[i+periods-1, 'ema_'+str(periods)]
 
-        output = data['ema']
+        output = data['ema_'+str(periods)]
         output.index = data['TRADE_DT']
         return output
 
@@ -207,8 +207,8 @@ class StockData:
         for i in range(data.shape[0]):  # 遍历每一行，计算mtr
             data.loc[i, 'mtr'] = self.__calculate_mtr(data.loc[i, 'S_DQ_HIGH'], data.loc[i, 'S_DQ_LOW'], data.loc[i, 'S_DQ_PRECLOSE'])
 
-        data['atr'] = data['mtr'].rolling(periods).mean()  # 过去periods天的mtr平均值
-        output = data.loc(axis=1)['atr']
+        data['atr_'+str(periods)] = data['mtr'].rolling(periods).mean()  # 过去periods天的mtr平均值
+        output = data.loc(axis=1)['atr_'+str(periods)]
         output.index = data["TRADE_DT"]
         return output
 
@@ -217,11 +217,13 @@ class StockData:
 
         for i in range(data.shape[0]-periods):  # 从第periods行开始遍历每一行
             pctchanges = data.loc[i:i+periods, 'S_DQ_PCTCHANGE'].values.tolist()  # 将一个periosd内的pctchange放入列表
-            data.loc[i+periods, 'rsi'] = self.__calculate_rsi(pctchanges)  # 计算该periods内的rsi
+            data.loc[i+periods, 'rsi_'+str(periods)] = self.__calculate_rsi(pctchanges)  # 计算该periods内的rsi
 
-        output = data['rsi']
+        output = data['rsi_'+str(periods)]
         output.index = data['TRADE_DT']
         return output
+
+    def macd(self, symbol: str, ):
 
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
