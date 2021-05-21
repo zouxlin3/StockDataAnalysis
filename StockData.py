@@ -145,9 +145,9 @@ class StockData:
         output = pd.DataFrame(columns=('date', 'open', 'close', 'high', 'low', 'volume', 'turnover', 'vwap'))
 
         rows = data.shape[0]
-        for i in range(rows):
-            if (i+1) % freq == 0:
-                clip = data[i+1-freq:i+1]
+        for i in range(rows):  # 遍历data每一行
+            if (i+1) % freq == 0:  # 行数达到freq倍数时进行一次重采样
+                clip = data[i+1-freq:i+1]  # 选取前freq行
                 clip = clip.reset_index(drop=True)
                 aline = pd.Series({
                     'date': clip.loc[0, 'TRADE_DT'],
@@ -167,7 +167,36 @@ class StockData:
     def moving_average(self, symbol: str, field: str, window: int):
         data = self.dataframes[symbol]
 
-        output = data[self.__field_change(field)].rolling(window, center=True).mean()
+        output = data[self.__field_change(field)].rolling(window).mean()
+        output.index = data['TRADE_DT']
+        return output
+
+    '''
+    EMA Calculation
+    There are three steps to calculate the EMA. Here is the formula for a 5 Period EMA
+
+    1. Calculate the SMA  # values为S_DQ_AVGPRICE
+    (Period Values / Number of Periods)
+    
+    2. Calculate the Multiplier
+    2 / (Number of Periods + 1)
+
+    3. Calculate the EMA
+    For the first EMA, we use the SMA(previous day) instead of EMA(previous day).
+    EMA = {Close - EMA(previous day)} x multiplier + EMA(previous day)
+    '''
+    def ema(self, symbol: str, periods: int):
+        data = self.dataframes[symbol]
+
+        data['sma'] = data['S_DQ_AVGPRICE'].rolling(periods).mean()  # 计算sma
+        multiplier = 2/(periods+1)
+
+        data.loc[periods-1, 'ema'] = data.loc[periods-1, 'sma']  # 将第一个ema设为同日的sma
+        for i in range(data.shape[0]-periods):  # 从第二个ema开始计算
+            data.loc[i+periods, 'ema'] = (data.loc[i+periods, 'S_DQ_CLOSE']-data.loc[i+periods-1, 'ema'])\
+                                         * multiplier+data.loc[i+periods-1, 'ema']
+
+        output = data['ema']
         output.index = data['TRADE_DT']
         return output
 
@@ -197,7 +226,11 @@ class StockData:
             'preclose': 'S_DQ_PRECLOSE'
         }
 
-        return fields[field]
+        changed_field = fields.get(field)
+        if changed_field:
+            return changed_field
+        else:
+            return field
 
     def __int_remove_nan(self, value: str):  # str2int, 将NaN设为0
         if value != value:
