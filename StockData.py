@@ -289,7 +289,7 @@ class StockData:
         max_drawdown_ratio = 0
 
         for i in range(data.shape[0]):  # 遍历data每一行
-            close = data.loc[i, 'S_DQ_CLOSE']
+            close = data.loc[i, 'forward_adjust_close']
             if close > pre_max:  # 当日之前的最大值
                 pre_max = close
 
