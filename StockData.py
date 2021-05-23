@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import calendar
 
 
 class StockData:
@@ -246,6 +247,23 @@ class StockData:
         output.index = data['TRADE_DT']
         return output
 
+    def calc_return(self, symbol: str, freq: str):
+        dates = self.__get_date_by_freq(symbol, freq)  # 该freq下所有时间段的起始终止时间
+        data = self.dataframes[symbol]
+        output = pd.DataFrame(columns=('date', 'return'))
+
+        for i in range(dates.shape[0]):
+            output = output.append(pd.Series({'date': dates.loc[i, 'end']}), ignore_index=True)
+
+            start_index = data[(data['TRADE_DT'] == dates.loc[i, 'start'])].index[0]  # 用close计算return
+            end_index = data[(data['TRADE_DT'] == dates.loc[i, 'end'])].index[0]
+            start_close = data.loc[start_index, 'S_DQ_CLOSE']
+            end_close = data.loc[end_index, 'S_DQ_CLOSE']
+            ret = ((end_close - start_close)/start_close)*100
+
+            output.loc[i, 'return'] = round(ret, 4)  # 保留4位小数
+        return output
+
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
         if filepath:
@@ -325,3 +343,49 @@ class StockData:
             down_avg = down_sum/down_num
 
         return (up_avg/(up_avg+abs(down_avg)))*100
+
+    def __get_end_date(self, symbol: str, freq: str, start_date):  # 获取不同freq下时间段的最后一天
+        if freq == 'm':
+            days_of_month = calendar.monthrange(start_date.year, start_date.month)[1]
+            end_date = pd.Timestamp(start_date.year, start_date.month, days_of_month)
+
+        if freq == 'q':
+            end_month = start_date.month
+            while end_month != 3 and end_month != 6 and end_month != 9 and end_month != 12:  # 判断开始日期所属季节的最后一月
+                end_month = end_month + 1
+            days_of_month = calendar.monthrange(start_date.year, end_month)[1]
+            end_date = pd.Timestamp(start_date.year, end_month, days_of_month)
+
+        if freq == 'h':
+            if start_date.month <= 6:  # 判断开始日期属于上半年还是下半年
+                end_date = pd.Timestamp(start_date.year, 6, 30)
+            else:
+                end_date = pd.Timestamp(start_date.year, 12, 31)
+
+        if freq == 'y':
+            end_date = pd.Timestamp(start_date.year, 12, 31)
+
+        data = self.dataframes[symbol]
+        timedelta = pd.Timedelta(days=1)
+        while len(data[(data['TRADE_DT'] == end_date)].index) == 0:  # 该日期没有数据时，往前延一天
+            end_date = end_date - timedelta
+
+        return end_date
+
+    def __get_date_by_freq(self, symbol: str, freq: str):  # 返回该freq下所有时间段的start_date和end_date
+        output = pd.DataFrame(columns=('start', 'end'))
+        data = self.dataframes[symbol]
+
+        output.loc[0, 'start'] = data.loc[0, 'TRADE_DT']
+        output.loc[0, 'end'] = self.__get_end_date(symbol, freq, output.loc[0, 'start'])
+
+        data_rows = data.shape[0]
+        output_rows = output.shape[0]
+
+        while output.loc[output_rows-1, 'end'] != data.loc[data_rows-1, 'TRADE_DT']:
+            last_end_index = data[(data['TRADE_DT'] == output.loc[output_rows-1, 'end'])].index[0]  # 上一个enddate即下一个startdate
+            output = output.append(pd.Series({'start': output.loc[output_rows-1, 'end']}), ignore_index=True)
+            output_rows = output.shape[0]
+            output.loc[output_rows-1, 'end'] = self.__get_end_date(symbol, freq, data.loc[last_end_index+1, 'TRADE_DT'])  # 用startdate的下一天计算该freq下的enddate
+
+        return output
