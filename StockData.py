@@ -68,7 +68,7 @@ class StockData:
 
             date_index = data[(data['TRADE_DT'] == adate)].index
             if len(date_index) == 0:  # 该日期没有数据时
-                output.append(pd.Series({'symbols': i}))
+                output.append(pd.Series({'symbols': i}), ignore_index=True)
                 continue
 
             astock = data.iloc[date_index[0]]  # 取该股票日频数据中的一行
@@ -77,6 +77,7 @@ class StockData:
             output = output.append(astock)  # 不能直接output.append
 
         output['symbols'] = output['symbols'].apply(lambda x: x[:6])  # 取S_INFO_WINDCODE的前6位，即股票代码
+        output = output.reset_index(drop=True)
         return output
 
     def get_data_by_field(self, field: str, symbols: List[str]):
@@ -136,6 +137,7 @@ class StockData:
                                                                      data.loc[rows-1-i, 'forward_af'])
 
         for i in ['open', 'high', 'low', 'close']:  # 对代表价格计算前复权价
+            data.loc[rows-1, 'forward_adjust_'+i] = data.loc[rows-1, self.__field_change(i)]  # 最新日期的前复权价取原值
             for j in range(rows-1):
                 data.loc[rows-2-j, 'forward_adjust_'+i] = self.__forward_adjust_price(data.loc[rows - 2 - j, self.__field_change(i)],
                                                                                       data.loc[rows-2-j, 'forward_af'],
@@ -153,12 +155,12 @@ class StockData:
                 clip = data[i+1-freq:i+1]  # 选取前freq行
                 clip = clip.reset_index(drop=True)
                 aline = pd.Series({
-                    'date': clip.loc[0, 'TRADE_DT'],
+                    'date': clip.loc[freq-1, 'TRADE_DT'],
                     'open': clip.loc[0, 'S_DQ_OPEN'],
                     'close': clip.loc[freq-1, 'S_DQ_CLOSE'],
                     'high': max(clip.loc(axis=1)['S_DQ_HIGH'].values.tolist()),
                     'low': min(clip.loc(axis=1)['S_DQ_LOW'].values.tolist()),
-                    'volume': sum(clip.loc(axis=1)['S_DQ_VOLUME'].values.tolist()),
+                    'volume': round(sum(clip.loc(axis=1)['S_DQ_VOLUME'].values.tolist()), 0),
                     'turnover': sum(clip.loc(axis=1)['S_DQ_AMOUNT'].values.tolist()),
                 })
                 if aline['volume'] != 0:
@@ -167,10 +169,10 @@ class StockData:
 
         return output
 
-    def moving_average(self, symbol: str, field: str, window: int):
+    def moving_average(self, symbol: str, field: str, window: int):  # 先使用adjust_data
         data = self.dataframes[symbol]
 
-        output = data[self.__field_change(field)].rolling(window).mean()
+        output = data['forward_adjust_'+field].rolling(window).mean()
         output.index = data['TRADE_DT']
         return output
 
@@ -188,7 +190,7 @@ class StockData:
     For the first EMA, we use the SMA(previous day) instead of EMA(previous day).
     EMA = {Close - EMA(previous day)} x multiplier + EMA(previous day)
     '''
-    def ema(self, symbol: str, periods: int):
+    def ema(self, symbol: str, periods: int):  # 先使用adjust_data
         data = self.dataframes[symbol]
 
         data['sma_'+str(periods)] = data['S_DQ_AVGPRICE'].rolling(periods).mean()  # 计算sma
@@ -196,25 +198,25 @@ class StockData:
 
         data.loc[periods-1, 'ema_'+str(periods)] = data.loc[periods-1, 'sma_'+str(periods)]  # 将第一个ema设为同日的sma
         for i in range(data.shape[0]-periods):  # 从第二个ema开始计算
-            data.loc[i+periods, 'ema_'+str(periods)] = (data.loc[i+periods, 'S_DQ_CLOSE']-data.loc[i+periods-1, 'ema_'+str(periods)])\
+            data.loc[i+periods, 'ema_'+str(periods)] = (data.loc[i+periods, 'forward_adjust_close']-data.loc[i+periods-1, 'ema_'+str(periods)])\
                                          * multiplier+data.loc[i+periods-1, 'ema_'+str(periods)]
 
         output = data['ema_'+str(periods)]
         output.index = data['TRADE_DT']
         return output
 
-    def atr(self, symbol: str, periods: int):
+    def atr(self, symbol: str, periods: int):  # 先使用adjust_data
         data = self.dataframes[symbol]
 
         for i in range(data.shape[0]):  # 遍历每一行，计算mtr
-            data.loc[i, 'mtr'] = self.__calculate_mtr(data.loc[i, 'S_DQ_HIGH'], data.loc[i, 'S_DQ_LOW'], data.loc[i, 'S_DQ_PRECLOSE'])
+            data.loc[i, 'mtr'] = self.__calculate_mtr(data.loc[i, 'forward_adjust_high'], data.loc[i, 'forward_adjust_low'], data.loc[i, 'S_DQ_PRECLOSE'])
 
         data['atr_'+str(periods)] = data['mtr'].rolling(periods).mean()  # 过去periods天的mtr平均值
         output = data.loc(axis=1)['atr_'+str(periods)]
         output.index = data["TRADE_DT"]
         return output
 
-    def rsi(self, symbol: str, periods: int):
+    def rsi(self, symbol: str, periods: int):  # 先使用adjust_data
         data = self.dataframes[symbol]
 
         for i in range(data.shape[0]-periods):  # 从第periods行开始遍历每一行
@@ -230,7 +232,7 @@ class StockData:
     DEA为DIF移动平均
     MACD＝(DIF-DEA)*2
     '''
-    def macd(self, symbol: str, long: int, short: int, dea_periods: int):
+    def macd(self, symbol: str, long: int, short: int, dea_periods: int):  # 先使用adjust_data
         data = self.dataframes[symbol]
 
         self.ema(symbol, long)
@@ -248,7 +250,7 @@ class StockData:
         output.index = data['TRADE_DT']
         return output
 
-    def calc_return(self, symbol: str, freq: str):
+    def calc_return(self, symbol: str, freq: str):  # 先使用adjust_data
         dates = self.__get_date_by_freq(symbol, freq)  # 该freq下所有时间段的起始终止时间
         data = self.dataframes[symbol]
         output = pd.DataFrame(columns=('date', 'return_'+freq))
@@ -258,14 +260,14 @@ class StockData:
 
             start_index = data[(data['TRADE_DT'] == dates.loc[i, 'start'])].index[0]  # 用close计算return
             end_index = data[(data['TRADE_DT'] == dates.loc[i, 'end'])].index[0]
-            start_close = data.loc[start_index, 'S_DQ_CLOSE']
-            end_close = data.loc[end_index, 'S_DQ_CLOSE']
+            start_close = data.loc[start_index, 'forward_adjust_close']
+            end_close = data.loc[end_index, 'forward_adjust_close']
             ret = ((end_close - start_close)/start_close)*100  # 百分比
 
             output.loc[i, 'return'] = round(ret, 4)  # 保留4位小数
         return output
 
-    def calc_sharpe_ratio(self, symbol: str, freq: str):
+    def calc_sharpe_ratio(self, symbol: str, freq: str):  # 先使用adjust_data
         return_df = self.calc_return(symbol, freq)
 
         std = return_df.std(axis=0)['return']
@@ -280,7 +282,7 @@ class StockData:
 
         return (mean-rfrs[freq]*100)/std  # 夏普比率=（收益率-无风险利率）/收益率方差
 
-    def calc_max_drawdown_ratio(self, symbol: str):
+    def calc_max_drawdown_ratio(self, symbol: str):  # 先使用adjust_data
         data = self.dataframes[symbol]
 
         pre_max = 0
