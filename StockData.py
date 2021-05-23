@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import calendar
+from math import pow
 
 
 class StockData:
@@ -250,7 +251,7 @@ class StockData:
     def calc_return(self, symbol: str, freq: str):
         dates = self.__get_date_by_freq(symbol, freq)  # 该freq下所有时间段的起始终止时间
         data = self.dataframes[symbol]
-        output = pd.DataFrame(columns=('date', 'return'))
+        output = pd.DataFrame(columns=('date', 'return_'+freq))
 
         for i in range(dates.shape[0]):
             output = output.append(pd.Series({'date': dates.loc[i, 'end']}), ignore_index=True)
@@ -259,10 +260,42 @@ class StockData:
             end_index = data[(data['TRADE_DT'] == dates.loc[i, 'end'])].index[0]
             start_close = data.loc[start_index, 'S_DQ_CLOSE']
             end_close = data.loc[end_index, 'S_DQ_CLOSE']
-            ret = ((end_close - start_close)/start_close)*100
+            ret = ((end_close - start_close)/start_close)*100  # 百分比
 
             output.loc[i, 'return'] = round(ret, 4)  # 保留4位小数
         return output
+
+    def calc_sharpe_ratio(self, symbol: str, freq: str):
+        return_df = self.calc_return(symbol, freq)
+
+        std = return_df.std(axis=0)['return']
+        mean = return_df.mean(axis=0)['return']
+        rfr_year = 0.03
+        rfrs = {
+            'm': pow(1+rfr_year, 1/12)-1,
+            'q': pow(1+rfr_year, 1/4)-1,
+            'h': pow(1+rfr_year, 1/2)-1,
+            'y': rfr_year
+        }  # 不同freq的无风险利率（%）
+
+        return (mean-rfrs[freq]*100)/std  # 夏普比率=（收益率-无风险利率）/收益率方差
+
+    def calc_max_drawdown_ratio(self, symbol: str):
+        data = self.dataframes[symbol]
+
+        pre_max = 0
+        max_drawdown_ratio = 0
+
+        for i in range(data.shape[0]):  # 遍历data每一行
+            close = data.loc[i, 'S_DQ_CLOSE']
+            if close > pre_max:  # 当日之前的最大值
+                pre_max = close
+
+            drawdown_ratio = (1-close/pre_max)*100  # 计算当日回撤率
+            if drawdown_ratio > max_drawdown_ratio:  # 判断最大回撤率
+                max_drawdown_ratio = drawdown_ratio
+
+        return max_drawdown_ratio
 
     def __get_filepath(self, stock: str):  # 判断该股票csv是否存在，返回csv路径
         filepath = self.filenames.get(stock)
