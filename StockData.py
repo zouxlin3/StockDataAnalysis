@@ -8,7 +8,7 @@ from math import pow
 
 
 class StockData:
-    def __init__(self, path: str):
+    def __init__(self, path: str):  # path为csv数据文件所在路径
         self.path = os.path.normpath(path)
 
         self.filenames = {}
